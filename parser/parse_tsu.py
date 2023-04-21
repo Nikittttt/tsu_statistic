@@ -61,67 +61,80 @@ def main():
             body = browser.find_element_by_xpath('//tbody')
             semester_choice = Select(body.find_element_by_xpath('.//select[@name="semestr"]'))
             semester_choice.select_by_visible_text(semester)
-            for course_name in courses_name:
-                print(f"<{semester}> <{course_name}>")
-
-                WebDriverWait(browser, implicitly_wait).until((
-                    EC.presence_of_element_located((By.XPATH, '//img[@alt="Выбор курса"]')))
-                )
-                find = browser.find_element_by_xpath('//img[@alt="Выбор курса"]')
-                find.click()
-
-                WebDriverWait(browser, implicitly_wait).until((
-                    EC.presence_of_element_located((By.XPATH, '//input[@id="course_sel_1"]')))
-                )
-                sleep(1)
-                input_name_course = browser.find_element_by_xpath('//input[@id="course_sel_1"]')
-                input_name_course.clear()
-                input_name_course.send_keys(course_name)
-
-                find = browser.find_element_by_xpath('//input[@type="submit"]')
-                find.click()
-                sleep(2)  # на странице ничего значимого не меняется и у меня нет особо идей как это сделать нормально
+            course_error = 0
+            course_ind = 0
+            while True:
+                course_name = courses_name[course_ind]
                 try:
-                    go_to_course = browser.find_element_by_xpath('//input[@type="checkbox"]')
-                    go_to_course.click()
-                except NoSuchElementException:
-                    go_back = browser.find_elements_by_xpath('//img[@src="/core/images/img_popup/close.png"]')[-1]
-                    go_back.click()
-                    continue
-                body = browser.find_element_by_xpath('//tbody')
+                    print(f"<{semester}> <{course_name}>")
 
-                list_score.append({'semester': semester, 'course_name': course_name, 'groups': []})
+                    WebDriverWait(browser, implicitly_wait).until((
+                        EC.presence_of_element_located((By.XPATH, '//img[@alt="Выбор курса"]')))
+                    )
+                    find = browser.find_element_by_xpath('//img[@alt="Выбор курса"]')
+                    find.click()
 
-                WebDriverWait(browser, implicitly_wait).until((
-                    EC.presence_of_element_located((By.XPATH, '//span[@class="T_icoClosePunktImg"]')))
-                )
+                    WebDriverWait(browser, implicitly_wait).until((
+                        EC.presence_of_element_located((By.XPATH, '//input[@id="course_sel_1"]')))
+                    )
+                    sleep(1)
+                    input_name_course = browser.find_element_by_xpath('//input[@id="course_sel_1"]')
+                    input_name_course.clear()
+                    input_name_course.send_keys(course_name)
 
-                list_to_open = body.find_elements_by_xpath('.//span[@class="T_icoClosePunktImg"]')
-                for i in list_to_open[::-1]:
-                    i.click()
+                    find = browser.find_element_by_xpath('//input[@type="submit"]')
+                    find.click()
+                    sleep(2)  # на странице ничего значимого не меняется и у меня нет особо идей как это сделать нормально
+                    try:
+                        go_to_course = browser.find_element_by_xpath('//input[@type="checkbox"]')
+                        go_to_course.click()
+                    except NoSuchElementException:
+                        go_back = browser.find_elements_by_xpath('//img[@src="/core/images/img_popup/close.png"]')[-1]
+                        go_back.click()
+                        raise
+                    body = browser.find_element_by_xpath('//tbody')
 
-                WebDriverWait(browser, implicitly_wait).until((
-                    EC.invisibility_of_element((By.XPATH, '//span[@class="T_icoClosePunktImg"]')))
-                )
+                    list_score.append({'semester': semester, 'course_name': course_name, 'groups': []})
 
-                table = body.find_element_by_xpath('.//div[@id="div_results"]').find_element_by_xpath('.//tbody')
-                rows = table.find_elements_by_xpath('.//tr[@id]')
-                for row in rows:
-                    if row.get_attribute("id")[0] == 'G':
-                        name_group = row.find_elements_by_xpath('.//td')[1].text
-                        print(f"\t\t<{name_group}>")
-                        list_score[-1]['groups'].append({'name': name_group, 'final': [], 'score': []})
-                    else:
-                        scores = row.find_elements_by_xpath('.//td[@id]')
-                        final = row.find_elements_by_xpath('.//td[contains(@class, " core_table_22")]')[0].text
-                        list_score[-1]['groups'][-1]['final'].append(final)
-                        score_l = []
-                        for score in scores:
-                            score_to_add = score.text
-                            if score_to_add in ['?', '']:
-                                score_to_add = None
-                            score_l.append(score_to_add)
-                        list_score[-1]['groups'][-1]['score'].append(score_l)
+                    WebDriverWait(browser, implicitly_wait).until((
+                        EC.presence_of_element_located((By.XPATH, '//span[@class="T_icoClosePunktImg"]')))
+                    )
+
+                    list_to_open = body.find_elements_by_xpath('.//span[@class="T_icoClosePunktImg"]')
+                    for i in list_to_open[::-1]:
+                        i.click()
+
+                    WebDriverWait(browser, implicitly_wait).until((
+                        EC.invisibility_of_element((By.XPATH, '//span[@class="T_icoClosePunktImg"]')))
+                    )
+
+                    table = body.find_element_by_xpath('.//div[@id="div_results"]').find_element_by_xpath('.//tbody')
+                    rows = table.find_elements_by_xpath('.//tr[@id]')
+                    for row in rows:
+                        if row.get_attribute("id")[0] == 'G':
+                            name_group = row.find_elements_by_xpath('.//td')[1].text
+                            print(f"\t\t<{name_group}>")
+                            list_score[-1]['groups'].append({'name': name_group, 'final': [], 'score': []})
+                        else:
+                            scores = row.find_elements_by_xpath('.//td[@id]')
+                            final = row.find_elements_by_xpath('.//td[contains(@class, " core_table_22")]')[0].text
+                            list_score[-1]['groups'][-1]['final'].append(final)
+                            score_l = []
+                            for score in scores:
+                                score_to_add = score.text
+                                if score_to_add in ['?', '']:
+                                    score_to_add = None
+                                score_l.append(score_to_add)
+                            list_score[-1]['groups'][-1]['score'].append(score_l)
+                except:
+                    course_error += 1
+                    if course_error == 3:
+                        course_ind += 1
+                else:
+                    course_error = 0
+                    course_ind += 1
+                if course_ind == len(courses_name):
+                    break
     name_file = f"./result/{int(time())}.json"
     with open(name_file, 'w', encoding='utf-8') as outfile:
         json.dump(list_score, outfile, ensure_ascii=False, indent=4)
