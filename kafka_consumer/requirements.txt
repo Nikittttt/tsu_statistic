@@ -1,2 +1,2 @@
 confluent-kafka==2.1.0
-greenplum-python==1.0.1
+psycopg2==2.9.6

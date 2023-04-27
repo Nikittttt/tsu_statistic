@@ -68,7 +68,7 @@ def transform_data(**kwargs):
                 for score_ind in range(len(group["name"])):
                     dict_to_add["semester"] = data["semester"]
                     dict_to_add["course_name"] = data["course_name"]
-                    dict_to_add["group_name"] = group["name"]
+                    dict_to_add["group_name"] = group["name"].strip()
                     dict_to_add["score"] = group["score"]
                     dict_to_add["final_score"] = group["final"]
             final_data.append(dict_to_add)
@@ -131,11 +131,11 @@ with DAG('etl_data', description='extract transform load data parsed from tsu', 
     load = PythonOperator(
         task_id='load_data',
         python_callable=load_data)
-    #del_json = PythonOperator(
-    #    task_id='del_json_files',
-    #    python_callable=del_json_files)
+    del_json = PythonOperator(
+        task_id='del_json_files',
+        python_callable=del_json_files)
 
     sensor_data >> extract
     extract >> transform
     transform >> load
-    #load >> del_json
+    load >> del_json

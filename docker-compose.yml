@@ -229,6 +229,7 @@ services:
       - envs/gp.env
     networks:
       - kafka-net
+      - gpdb
 
 networks:
   gpdb:

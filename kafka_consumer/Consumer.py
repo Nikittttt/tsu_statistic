@@ -1,5 +1,6 @@
 from confluent_kafka import Consumer
-#import greenplumpython as gp
+import psycopg2
+from datetime import datetime
 
 from json import loads
 import os
@@ -10,31 +11,21 @@ conf = {'bootstrap.servers': "kafka:29092",
 
 consumer = Consumer(conf)
 
-#consumer = KafkaConsumer(
-#    'tsuscore',
-#    bootstrap_servers=['localhost:29092'],
-#    auto_offset_reset='earliest',
-#    enable_auto_commit=True,
-#    group_id='my-group',
-#    value_deserializer=lambda x: loads(x.decode('utf-8')))
+greenplum = psycopg2.connect(
+    host=os.getenv('GREENPLUM_HOST'),
+    database=os.getenv('GREENPLUM_DB'),
+    user=os.getenv('GREENPLUM_USER'),
+    password=os.getenv('PGPASSWORD'))
+cursor = greenplum.cursor()
 
-#db = gp.database(
-#        params={
-#          "host": os.getenv('GREENPLUM_HOST'),
-#          "dbname": os.getenv('GREENPLUM_DB'),
-#          "user": os.getenv('GREENPLUM_USER'),
-#          "password": os.getenv('PGPASSWORD'),
-#          "port": 5433,
-#        }
-#)
-#cursor = db.cursor()
-#cursor.execute("CREATE TABLE IF NOT EXISTS "
-#               "score_table("
-#               "semester text NOT NULL,"
-#               "course_name text NOT NULL,"
-#               "group_name text NOT NULL,"
-#               "final_score int NOT NULL,"
-#               "score int[]) ;")
+cursor.execute("CREATE TABLE IF NOT EXISTS "
+               "score_table("
+               "created_at TIMESTAMP DEFAULT now(),"
+               "semester text NOT NULL,"
+               "course_name text NOT NULL,"
+               "group_name text NOT NULL,"
+               "final_score int NOT NULL,"
+               "score int[]) ;")
 
 
 # Subscribe to topic
@@ -53,12 +44,28 @@ try:
         elif msg.error():
             print("ERROR: %s".format(msg.error()))
         else:
-            # Extract the (optional) key and value, and print.
-
             print("Consumed event from topic {topic}: key = {key:12} value = {value:12}".format(
                 topic=msg.topic(), key=msg.key().decode('utf-8'), value=msg.value().decode('utf-8')))
+
+            data = loads(msg.value().decode('utf-8').replace("\'", "\"").replace('None', 'null'))
+            for i in range(len(data["final_score"])):
+                cursor.execute(
+                    "INSERT INTO score_table("
+                                    "semester, "
+                                    "course_name, "
+                                    "group_name, "
+                                    "final_score, "
+                                    "score) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (data["semester"],
+                     data["course_name"],
+                     data["group_name"],
+                     data["final_score"][i],
+                     [int(i) if type(i) == str else None for i in data["score"][i]]))
+
 except KeyboardInterrupt:
     pass
 finally:
     # Leave group and commit final offsets
     consumer.close()
+    greenplum.close()
