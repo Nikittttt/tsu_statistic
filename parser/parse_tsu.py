@@ -117,7 +117,10 @@ def main():
                             list_score[-1]['groups'].append({'name': name_group, 'final': [], 'score': []})
                         else:
                             scores = row.find_elements_by_xpath('.//td[@id]')
-                            final = row.find_elements_by_xpath('.//td[contains(@class, " core_table_22")]')[0].text
+                            try:
+                                final = row.find_elements_by_xpath('.//td[@class=" core_table_22"]')[0].text
+                            except IndexError:
+                                final = row.find_elements_by_xpath('.//td[@class=" core_table_22 core_table_2bottom"]')[0].text
                             list_score[-1]['groups'][-1]['final'].append(final)
                             score_l = []
                             for score in scores:
@@ -126,9 +129,10 @@ def main():
                                     score_to_add = None
                                 score_l.append(score_to_add)
                             list_score[-1]['groups'][-1]['score'].append(score_l)
-                except:
+                except Exception as e:
                     course_error += 1
                     if course_error == 3:
+                        course_error = 0
                         course_ind += 1
                 else:
                     course_error = 0

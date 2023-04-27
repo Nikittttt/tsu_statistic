@@ -16,35 +16,75 @@ x-airflow-common:
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKEND: 'airflow.api.auth.backend.basic_auth'
   volumes:
-    - ./dags:/opt/airflow/dags
-    - ./log_check:/log_check
-    - ./logs:/opt/airflow/logs
-    - ./plugins:/opt/airflow/plugins
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/log_check:/log_check
+    - ./parser/result:/opt/airflow/result
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+  networks:
+      - kafka-net_airflow
   depends_on:
+    - kafka
     - redis
     - postgres_airflow
 services:
-  gpdb5:
-    #build:
-    #  context: .
-    #  dockerfile: ./gpdb/Dockerfile
-    image: "kochanpivotal/gpdb5oss"
-    command: bin/bash
-    hostname: "gpdbsne"
-    container_name: gpdbsne
-    ports:
-      - "5433:5433"
-      - "5005:5005"
-      - "5010:5010"
-      - "9022:22"
-      - "40000:40000"
-      - "40001:40001"
-      - "40002:40002"
-    expose:
-      - "5433"
+  db_seg_1:
+    image: greenplum:6
+    build:
+      context: ./greenplum
+      dockerfile: ./Dockerfile
+    container_name: db_seg_1
+    hostname: db_seg_1
+    command: tail -f /dev/null
+    environment:
+      - GP_NODE=segment
     volumes:
-      - ..:/code
-    tty: true
+      - gpdb1:/var/lib/gpdb/data
+    networks:
+      - gpdb
+  db_seg_2:
+    image: greenplum:6
+    build:
+      context: ./greenplum
+      dockerfile: ./Dockerfile
+    container_name: db_seg_2
+    hostname: db_seg_2
+    command: tail -f /dev/null
+    environment:
+      - GP_NODE=segment
+    volumes:
+      - gpdb2:/var/lib/gpdb/data
+    networks:
+      - gpdb
+  db_master_1:
+    image: greenplum:6
+    build:
+      context: ./greenplum
+      dockerfile: ./Dockerfile
+    container_name: db_master_1
+    hostname: db_master_1
+    command: tail -f /dev/null
+    environment:
+      - GP_NODE=master
+      - HOSTFILE=singlehost
+    volumes:
+      - gpdb0:/var/lib/gpdb/data
+    ports:
+      - "5432:5432"
+    depends_on:
+      - db_seg_1
+      - db_seg_2
+    links:
+      - db_seg_1:seg1
+      - db_seg_2:seg2
+    networks:
+      - gpdb
+  dbeaver:
+    image: dbeaver/cloudbeaver
+    container_name: dbeaver
+    ports:
+      - "8978:8978"
+      - "43119:43119"
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
     environment:
@@ -52,20 +92,47 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - 22181:2181
+    networks:
+      - kafka-net
 
   kafka:
+    container_name: kafka
     image: confluentinc/cp-kafka:latest
     depends_on:
       - zookeeper
     ports:
       - 29092:29092
+      - 9092:9092
+      - 9093:9093
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      TOPIC_AUTO_CREATE: "true"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - kafka-net
+      - kafka-net_airflow
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    container_name: kafka-ui
+    ports:
+      - "18080:8080"
+    restart: always
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+    networks:
+      - kafka-net
+    depends_on:
+      - kafka
+      - zookeeper
 
   spark:
     image: jupyter/pyspark-notebook
@@ -84,6 +151,8 @@ services:
       test: [ "CMD", "pg_isready", "-U", "airflow" ]
       interval: 5s
       retries: 5
+    networks:
+      - kafka-net_airflow
 
   redis:
     image: redis:latest
@@ -95,6 +164,8 @@ services:
       timeout: 30s
       retries: 50
     restart: always
+    networks:
+      - kafka-net_airflow
 
   airflow-webserver:
     <<: *airflow-common
@@ -148,3 +219,25 @@ services:
       timeout: 10s
       retries: 5
     restart: always
+  consumer:
+    command: python /Consumer.py
+    build:
+      context: kafka_consumer/
+    depends_on:
+      - kafka
+    env_file:
+      - envs/gp.env
+    networks:
+      - kafka-net
+
+networks:
+  gpdb:
+  kafka-net:
+    driver: bridge
+  kafka-net_airflow:
+    driver: bridge
+
+volumes:
+  gpdb0:
+  gpdb1:
+  gpdb2:
