@@ -1,4 +1,4 @@
-FROM python:3.12
+FROM python:3.11
 
 ENV PYTHONUNBUFFERED 1
 
@@ -19,5 +19,7 @@ RUN chmod +x /usr/local/bin/chromedriver
 # set display port to avoid crash
 ENV DISPLAY=:99
 
+COPY . .
 
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+CMD ["python", "parse_tsu.py"]

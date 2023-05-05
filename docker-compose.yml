@@ -230,6 +230,11 @@ services:
     networks:
       - kafka-net
       - gpdb
+  parser:
+    build:
+      context: /parser
+    volumes:
+      - ./parser/result:/result
 
 networks:
   gpdb:
